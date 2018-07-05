@@ -1,0 +1,5 @@
+build/
+node_modules/
+config.json
+config_prod.json
+test.sqlite

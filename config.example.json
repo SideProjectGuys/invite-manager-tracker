@@ -1,0 +1,17 @@
+{
+	"discordToken": "",
+	"environment": "dev",
+	"rabbitmq": {
+		"hostname": "localhost",
+		"username": "guest",
+		"password": "guest",
+		"prefix": ""
+	},
+	"sequelize": {
+		"dialect": "mysql",
+		"server": "localhost",
+		"username": "root",
+		"password": "",
+		"database": "im"
+	}
+}
