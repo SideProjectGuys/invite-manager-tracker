@@ -5,10 +5,9 @@
   "main": "invite-tracker.js",
   "scripts": {
     "start": "npm run build && node ./build/invite-tracker.js 1 1",
-    "import": "npm run build && node ./build/import.js",
+    "test": "npm run build && node ./build/test.js",
     "sync": "npm run build && node ./build/syncGuilds.js",
     "build": "tsc -p tsconfig.json",
-    "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "tslint -c ./tslint.json --project ./tsconfig.json --format stylish"
   },
   "repository": {
@@ -24,16 +23,16 @@
   "dependencies": {
     "amqplib": "^0.5.2",
     "eris": "^0.8.6",
-    "mysql2": "1.5.3",
-    "sequelize": "4.37.10"
+    "mysql2": "1.6.1",
+    "sequelize": "4.38.0"
   },
   "devDependencies": {
-    "@types/amqplib": "^0.5.7",
-    "@types/node": "10.3.2",
-    "@types/sequelize": "4.27.20",
+    "@types/amqplib": "^0.5.8",
+    "@types/node": "10.5.7",
+    "@types/sequelize": "4.27.24",
     "pre-commit": "1.2.2",
-    "tslint": "5.10.0",
-    "typescript": "2.9.1",
+    "tslint": "5.11.0",
+    "typescript": "3.0.1",
     "typestrict": "0.0.9"
   }
 }
