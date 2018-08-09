@@ -86,7 +86,7 @@ function compareInvites(
 	Object.keys(newObj).forEach(key => {
 		if (
 			newObj[key].uses !== 0 /* ignore new empty invites */ &&
-			oldObj[key].uses < newObj[key].uses
+			(!oldObj[key] || oldObj[key].uses < newObj[key].uses)
 		) {
 			inviteCodesUsed.push(key);
 		}
@@ -383,8 +383,11 @@ client.on('guildMemberAdd', async (guild, member) => {
 
 	let inviteCodesUsed = compareInvites(oldInvs, newInvs);
 
-	if (inviteCodesUsed.length === 0) {
-		console.log('USING AUDIT LOGS');
+	if (
+		inviteCodesUsed.length === 0 &&
+		guild.members.get(client.user.id).permission.has('viewAuditLogs')
+	) {
+		console.log(`USING AUDIT LOGS FOR ${member.id} IN ${guild.id}`);
 
 		const logs = await guild.getAuditLogs(50, undefined, INVITE_CREATE);
 		if (logs.entries.length) {
@@ -411,14 +414,14 @@ client.on('guildMemberAdd', async (guild, member) => {
 			inviteCodesUsed = inviteCodesUsed.concat(createdCodes.map(c => c.code));
 			invs = invs.concat(createdCodes as any);
 		}
+	}
 
-		if (inviteCodesUsed.length === 0) {
-			console.error(
-				`NO USED INVITE CODE FOUND: g:${guild.id} | m: ${member.id} ` +
-					`| t:${member.joinedAt} | invs: ${JSON.stringify(newInvs)} ` +
-					`| oldInvs: ${JSON.stringify(oldInvs)}`
-			);
-		}
+	if (inviteCodesUsed.length === 0) {
+		console.error(
+			`NO USED INVITE CODE FOUND: g:${guild.id} | m: ${member.id} ` +
+				`| t:${member.joinedAt} | invs: ${JSON.stringify(newInvs)} ` +
+				`| oldInvs: ${JSON.stringify(oldInvs)}`
+		);
 	}
 
 	if (inviteCodesUsed.length === 1) {
