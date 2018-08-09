@@ -59,7 +59,7 @@ const client = new Client(config.discordToken, {
 });
 
 process.on('unhandledRejection', (reason: any, p: any) => {
-	console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
+	console.error('Unhandled Rejection at: Promise', p, 'reason:', reason);
 });
 
 let sendChannel: amqplib.Channel;
@@ -159,7 +159,9 @@ async function insertGuildData(guild: Guild, isNew: boolean = false) {
 
 	// Filter out new invite codes
 	const newInviteCodes = invs.filter(
-		inv => typeof inviteStore[inv.guild.id][inv.code] === 'undefined'
+		inv =>
+			inviteStore[inv.guild.id] === undefined ||
+			inviteStore[inv.guild.id][inv.code] === undefined
 	);
 
 	// Update our local cache
@@ -430,11 +432,13 @@ client.on('guildMemberAdd', async (guild, member) => {
 		possibleMatches = inviteCodesUsed.join(',');
 	}
 
-	const codesUsed = inviteCodesUsed
+	// These are all used codes, and all new codes combined.
+	const newAndUsedCodes = inviteCodesUsed
 		.map(code => invs.find(i => i.code === code))
-		.filter(inv => !!inv);
+		.filter(inv => !!inv)
+		.concat(invs.filter(inv => !oldInvs[inv.code]));
 
-	const newMembers = codesUsed
+	const newMembers = newAndUsedCodes
 		.map(inv => inv.inviter)
 		.filter(inviter => !!inviter)
 		.concat(member.user) // Add invitee
@@ -448,7 +452,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 	});
 
 	const channelPromise = channels.bulkCreate(
-		codesUsed.map(inv => inv.channel).map(channel => ({
+		newAndUsedCodes.map(inv => inv.channel).map(channel => ({
 			id: channel.id,
 			guildId: member.guild.id,
 			name: channel.name
@@ -461,7 +465,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 	// We need the members and channels in the DB for the invite codes
 	await Promise.all([membersPromise, channelPromise]);
 
-	const codes = codesUsed.map(inv => ({
+	const codes = newAndUsedCodes.map(inv => ({
 		createdAt: inv.createdAt ? inv.createdAt : new Date(),
 		code: inv.code,
 		channelId: inv.channel ? inv.channel.id : null,
