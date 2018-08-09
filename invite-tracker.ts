@@ -20,6 +20,7 @@ import {
 const config = require('../config.json');
 
 const GUILD_START_INTERVAL = 50;
+const INVITE_CREATE = 40;
 
 // First two arguments are "node" and "<filename>"
 if (process.argv.length < 4) {
@@ -62,30 +63,63 @@ process.on('unhandledRejection', (reason: any, p: any) => {
 });
 
 let sendChannel: amqplib.Channel;
-const inviteStore: { [key: string]: { [key: string]: number } } = {};
+const inviteStore: {
+	[guildId: string]: { [code: string]: { uses: number; maxUses: number } };
+} = {};
+const inviteStoreUpdate: { [guildId: string]: number } = {};
 
-function getInviteCounts(invs: Invite[]): { [key: string]: number } {
-	let localInvites: { [key: string]: number } = {};
+function getInviteCounts(
+	invs: Invite[]
+): { [key: string]: { uses: number; maxUses: number } } {
+	let localInvites: { [key: string]: { uses: number; maxUses: number } } = {};
 	invs.forEach(value => {
-		localInvites[value.code] = value.uses;
+		localInvites[value.code] = { uses: value.uses, maxUses: value.maxUses };
 	});
 	return localInvites;
 }
 
 function compareInvites(
-	oldObj: { [key: string]: number },
-	newObj: { [key: string]: number }
+	oldObj: { [key: string]: { uses: number; maxUses: number } },
+	newObj: { [key: string]: { uses: number; maxUses: number } }
 ): string[] {
 	let inviteCodesUsed: string[] = [];
 	Object.keys(newObj).forEach(key => {
 		if (
-			newObj[key] !== 0 /* ignore new empty invites */ &&
-			oldObj[key] !== newObj[key]
+			newObj[key].uses !== 0 /* ignore new empty invites */ &&
+			oldObj[key].uses < newObj[key].uses
 		) {
 			inviteCodesUsed.push(key);
 		}
 	});
+	Object.keys(oldObj).forEach(key => {
+		if (!newObj[key] && oldObj[key].uses === oldObj[key].maxUses - 1) {
+			inviteCodesUsed.push(key);
+		}
+	});
 	return inviteCodesUsed;
+}
+
+function idToBinary(num: string) {
+	let bin = '';
+	let high = parseInt(num.slice(0, -10), 10) || 0;
+	let low = parseInt(num.slice(-10), 10);
+	while (low > 0 || high > 0) {
+		// tslint:disable-next-line:no-bitwise
+		bin = String(low & 1) + bin;
+		low = Math.floor(low / 2);
+		if (high > 0) {
+			low += 5000000000 * (high % 2);
+			high = Math.floor(high / 2);
+		}
+	}
+	return bin;
+}
+
+// Discord epoch (2015-01-01T00:00:00.000Z)
+const EPOCH = 1420070400000;
+function deconstruct(snowflake: string) {
+	const BINARY = idToBinary(snowflake).padStart(64, '0');
+	return parseInt(BINARY.substring(0, 42), 2) + EPOCH;
 }
 
 const enum ChannelType {
@@ -130,6 +164,7 @@ async function insertGuildData(guild: Guild, isNew: boolean = false) {
 
 	// Update our local cache
 	inviteStore[guild.id] = getInviteCounts(invs);
+	inviteStoreUpdate[guild.id] = Date.now();
 
 	// Collect concurrent promises
 	const promises: any[] = [];
@@ -255,7 +290,13 @@ client.on('ready', async () => {
 	});
 
 	// Update our cache to match the DB
-	allCodes.forEach(inv => (inviteStore[inv.guildId][inv.code] = inv.uses));
+	allCodes.forEach(
+		inv =>
+			(inviteStore[inv.guildId][inv.code] = {
+				uses: inv.uses,
+				maxUses: inv.maxUses
+			})
+	);
 
 	let i = 0;
 	allGuilds.forEach(async guild => {
@@ -319,10 +360,13 @@ client.on('guildMemberAdd', async (guild, member) => {
 		return;
 	}
 
-	const invs = await guild.getInvites();
+	let invs = await guild.getInvites();
+	const lastUpdate = inviteStoreUpdate[guild.id];
 	const newInvs = getInviteCounts(invs);
 	const oldInvs = inviteStore[guild.id];
+
 	inviteStore[guild.id] = newInvs;
+	inviteStoreUpdate[guild.id] = Date.now();
 
 	if (!oldInvs) {
 		console.error(
@@ -337,23 +381,58 @@ client.on('guildMemberAdd', async (guild, member) => {
 	let exactMatchCode: string = null;
 	let possibleMatches: string = null;
 
-	const inviteCodesUsed = compareInvites(oldInvs, newInvs);
+	let inviteCodesUsed = compareInvites(oldInvs, newInvs);
+
+	if (inviteCodesUsed.length === 0) {
+		console.log('USING AUDIT LOGS');
+
+		const logs = await guild.getAuditLogs(50, undefined, INVITE_CREATE);
+		if (logs.entries.length) {
+			const createdCodes = logs.entries
+				.filter(
+					e =>
+						deconstruct(e.id) > lastUpdate &&
+						newInvs[e.after.code] === undefined
+				)
+				.map(e => ({
+					code: e.after.code,
+					channel: {
+						id: e.after.channel_id,
+						name: e.guild.channels.get(e.after.channel_id).name
+					},
+					guild: e.guild,
+					inviter: e.user,
+					uses: e.after.users,
+					maxUses: e.after.max_uses,
+					maxAge: e.after.max_age,
+					temporary: e.after.temporary,
+					createdAt: deconstruct(e.id)
+				}));
+			inviteCodesUsed = inviteCodesUsed.concat(createdCodes.map(c => c.code));
+			invs = invs.concat(createdCodes as any);
+		}
+
+		if (inviteCodesUsed.length === 0) {
+			console.error(
+				`NO USED INVITE CODE FOUND: g:${guild.id} | m: ${member.id} ` +
+					`| t:${member.joinedAt} | invs: ${JSON.stringify(newInvs)} ` +
+					`| oldInvs: ${JSON.stringify(oldInvs)}`
+			);
+		}
+	}
+
 	if (inviteCodesUsed.length === 1) {
 		exactMatchCode = inviteCodesUsed[0];
 	} else {
 		possibleMatches = inviteCodesUsed.join(',');
 	}
 
-	if (inviteCodesUsed.length === 0) {
-		console.error(
-			`NO USED INVITE CODE FOUND: g:${guild.id} | m: ${member.id} ` +
-				`| t:${member.joinedAt} | invs: ${JSON.stringify(newInvs)} ` +
-				`| oldInvs: ${JSON.stringify(oldInvs)}`
-		);
-	}
+	const codesUsed = inviteCodesUsed
+		.map(code => invs.find(i => i.code === code))
+		.filter(inv => !!inv);
 
-	const newMembers = inviteCodesUsed
-		.map(code => invs.find(i => i.code === code).inviter)
+	const newMembers = codesUsed
+		.map(inv => inv.inviter)
 		.filter(inviter => !!inviter)
 		.concat(member.user) // Add invitee
 		.map(m => ({
@@ -366,36 +445,31 @@ client.on('guildMemberAdd', async (guild, member) => {
 	});
 
 	const channelPromise = channels.bulkCreate(
-		inviteCodesUsed
-			.map(code => invs.find(i => i.code === code).channel)
-			.map(channel => ({
-				id: channel.id,
-				guildId: member.guild.id,
-				name: channel.name
-			})),
+		codesUsed.map(inv => inv.channel).map(channel => ({
+			id: channel.id,
+			guildId: member.guild.id,
+			name: channel.name
+		})),
 		{
 			updateOnDuplicate: ['name', 'updatedAt']
 		}
 	);
 
 	// We need the members and channels in the DB for the invite codes
-	const [ms, cs] = await Promise.all([membersPromise, channelPromise]);
+	await Promise.all([membersPromise, channelPromise]);
 
-	const codes = inviteCodesUsed.map(code => {
-		const inv = invs.find(i => i.code === code);
-		return {
-			createdAt: inv.createdAt ? inv.createdAt : new Date(),
-			code: inv.code,
-			channelId: inv.channel ? inv.channel.id : null,
-			isNative: !inv.inviter || inv.inviter.id !== client.user.id,
-			maxAge: inv.maxAge,
-			maxUses: inv.maxUses,
-			uses: inv.uses,
-			temporary: inv.temporary,
-			guildId: member.guild.id,
-			inviterId: inv.inviter ? inv.inviter.id : null
-		};
-	});
+	const codes = codesUsed.map(inv => ({
+		createdAt: inv.createdAt ? inv.createdAt : new Date(),
+		code: inv.code,
+		channelId: inv.channel ? inv.channel.id : null,
+		isNative: !inv.inviter || inv.inviter.id !== client.user.id,
+		maxAge: inv.maxAge,
+		maxUses: inv.maxUses,
+		uses: inv.uses,
+		temporary: inv.temporary,
+		guildId: member.guild.id,
+		inviterId: inv.inviter ? inv.inviter.id : null
+	}));
 
 	// We need the invite codes in the DB for the join
 	await inviteCodes.bulkCreate(codes, {
@@ -610,10 +684,14 @@ function saveMessages() {
 }*/
 
 // First sync our db
-console.log('Syncing db...');
+console.log('-------------------------------------');
+console.log('Syncing database...');
+console.log('-------------------------------------');
 sequelize.sync().then(() => {
-	console.log('Connecting to RabbitMQ...');
 	// Then connect to RabbitMQ
+	console.log('-------------------------------------');
+	console.log('Connecting to RabbitMQ...');
+	console.log('-------------------------------------');
 	amqplib
 		.connect(config.rabbitmq)
 		.then(async conn => {
@@ -626,8 +704,14 @@ sequelize.sync().then(() => {
 				durable: true
 			});
 
-			// And finally connect to discord
-			console.log('Logging in to discord...');
+			console.log('-------------------------------------');
+			console.log(`This is shard ${shardId}/${shardCount}`);
+			console.log('-------------------------------------');
+
+			console.log('-------------------------------------');
+			console.log('Starting bot...');
+			console.log('-------------------------------------');
+
 			client
 				.connect()
 				.then(() => console.log('Ready!'))
