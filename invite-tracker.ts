@@ -23,20 +23,21 @@ const GUILD_START_INTERVAL = 50;
 const INVITE_CREATE = 40;
 
 // First two arguments are "node" and "<filename>"
-if (process.argv.length < 4) {
+if (process.argv.length < 5) {
 	console.error('-------------------------------------');
-	console.error('Syntax: invite-tracker.js <shardId> <shardCount>');
+	console.error('Syntax: invite-tracker.js <token> <shardId> <shardCount>');
 	console.error('-------------------------------------');
 	process.exit(1);
 }
-const shardId = parseInt(process.argv[2], 10);
-const shardCount = parseInt(process.argv[3], 10);
+const token = process.argv[2];
+const shardId = parseInt(process.argv[3], 10);
+const shardCount = parseInt(process.argv[4], 10);
 
 const prefix = config.rabbitmq.prefix ? config.rabbitmq.prefix + '-' : '';
 const qJoinsName = prefix + 'joins-' + shardId + '-' + shardCount;
 const qLeavesName = prefix + 'leaves-' + shardId + '-' + shardCount;
 
-const client = new Client(config.discordToken, {
+const client = new Client(token, {
 	firstShardID: shardId - 1,
 	lastShardID: shardId - 1,
 	maxShards: shardCount,

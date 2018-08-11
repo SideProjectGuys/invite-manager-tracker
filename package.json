@@ -4,7 +4,7 @@
   "description": "",
   "main": "invite-tracker.js",
   "scripts": {
-    "start": "npm run build && node ./build/invite-tracker.js 1 1",
+    "start": "node scripts/dev-run.js",
     "test": "npm run build && node ./build/test.js",
     "sync": "npm run build && node ./build/syncGuilds.js",
     "build": "tsc -p tsconfig.json",
