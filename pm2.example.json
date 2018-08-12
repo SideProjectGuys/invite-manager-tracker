@@ -2,7 +2,7 @@
 	"apps": [{
 		"name": "tracker",
 		"script": "build/invite-tracker.js",
-		"args": "1 1",
+		"args": "<token> 1 1",
 		"log_date_format": "YYYY-MM-DD HH:mm:ss.SSS"
 	}]
 }
