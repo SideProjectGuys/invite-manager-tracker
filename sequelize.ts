@@ -32,6 +32,9 @@ export interface MemberInstance
 	getCommandUsage: Sequelize.HasManyGetAssociationsMixin<CommandUsageInstance>;
 	getPresences: Sequelize.HasManyGetAssociationsMixin<PresenceInstance>;
 	getLogs: Sequelize.HasManyGetAssociationsMixin<LogInstance>;
+	getPremiumSubscriptions: Sequelize.HasManyGetAssociationsMixin<
+		PremiumSubscriptionInstance
+	>;
 }
 
 export const members = sequelize.define<MemberInstance, MemberAttributes>(
@@ -73,6 +76,9 @@ export interface GuildInstance
 	getCommandUsage: Sequelize.HasManyGetAssociationsMixin<CommandUsageInstance>;
 	getPresences: Sequelize.HasManyGetAssociationsMixin<PresenceInstance>;
 	getLogs: Sequelize.HasManyGetAssociationsMixin<LogInstance>;
+	getPremiumSubscriptions: Sequelize.HasManyGetAssociationsMixin<
+		PremiumSubscriptionInstance
+	>;
 }
 
 export const guilds = sequelize.define<GuildInstance, GuildAttributes>(
@@ -110,7 +116,6 @@ export const roles = sequelize.define<RoleInstance, RoleAttributes>(
 	{
 		id: { type: Sequelize.STRING(32), primaryKey: true },
 		name: Sequelize.STRING,
-		discriminator: Sequelize.STRING(4),
 		color: Sequelize.STRING({ length: 7 })
 	},
 	{
@@ -169,11 +174,23 @@ export enum SettingsKey {
 	leaderboardStyle = 'leaderboardStyle',
 	autoSubtractFakes = 'autoSubtractFakes',
 	autoSubtractLeaves = 'autoSubtractLeaves',
-	autoSubtractLeaveThreshold = 'autoSubtractLeaveThreshold'
+	autoSubtractLeaveThreshold = 'autoSubtractLeaveThreshold',
+	rankAssignmentStyle = 'rankAssignmentStyle',
+	rankAnnouncementChannel = 'rankAnnouncementChannel',
+	rankAnnouncementMessage = 'rankAnnouncementMessage',
+	hideLeftMembersFromLeaderboard = 'hideLeftMembersFromLeaderboard'
 }
 
 export enum Lang {
-	en_us = 'en_us'
+	de = 'de',
+	en = 'en',
+	es = 'es',
+	fr = 'fr',
+	it = 'it',
+	nl = 'nl',
+	pt = 'pt',
+	ro = 'ro',
+	sv = 'sv'
 }
 
 export enum LeaderboardStyle {
@@ -182,19 +199,26 @@ export enum LeaderboardStyle {
 	mentions = 'mentions'
 }
 
+export enum RankAssignmentStyle {
+	all = 'all',
+	highest = 'highest'
+}
+
 export function getSettingsType(key: SettingsKey) {
 	if (
 		key === SettingsKey.joinMessageChannel ||
 		key === SettingsKey.leaveMessageChannel ||
 		key === SettingsKey.modChannel ||
-		key === SettingsKey.logChannel
+		key === SettingsKey.logChannel ||
+		key === SettingsKey.rankAnnouncementChannel
 	) {
 		return 'Channel';
 	}
 	if (
 		key === SettingsKey.getUpdates ||
 		key === SettingsKey.autoSubtractFakes ||
-		key === SettingsKey.autoSubtractLeaves
+		key === SettingsKey.autoSubtractLeaves ||
+		key === SettingsKey.hideLeftMembersFromLeaderboard
 	) {
 		return 'Boolean';
 	}
@@ -204,50 +228,9 @@ export function getSettingsType(key: SettingsKey) {
 	return 'String';
 }
 
-export function fromDbSettingsValue(
-	key: SettingsKey,
-	value: string
-): string | number | boolean {
-	if (value === undefined || value === null) {
-		return value;
-	}
-
-	const type = getSettingsType(key);
-	if (type === 'Channel') {
-		return `<#${value}>`;
-	} else if (type === 'Boolean') {
-		return !!value;
-	} else if (type === 'Number') {
-		return parseInt(value, 10);
-	}
-
-	return value;
-}
-
-export function toDbSettingsValue(
-	key: SettingsKey,
-	value: any
-): { value?: string | number | boolean; error?: string } {
-	if (value === 'default') {
-		return { value: defaultSettings[key] };
-	}
-	if (value === 'none' || value === 'empty' || value === 'null') {
-		return { value: null };
-	}
-
-	const type = getSettingsType(key);
-	if (type === 'Channel') {
-		return { value: (value as any).id };
-	} else if (type === 'Boolean') {
-		return { value: value ? 'true' : 'false' };
-	}
-
-	return { value };
-}
-
 export const defaultSettings: { [k in SettingsKey]: string } = {
 	prefix: '!',
-	lang: 'en_us',
+	lang: Lang.en,
 	joinMessage:
 		'{memberMention} **joined**; Invited by **{inviterName}** (**{numInvites}** invites)',
 	joinMessageChannel: null,
@@ -257,10 +240,15 @@ export const defaultSettings: { [k in SettingsKey]: string } = {
 	modChannel: null,
 	logChannel: null,
 	getUpdates: 'true',
-	leaderboardStyle: 'normal',
+	leaderboardStyle: LeaderboardStyle.normal,
 	autoSubtractFakes: 'true',
 	autoSubtractLeaves: 'true',
-	autoSubtractLeaveThreshold: '600' // seconds
+	autoSubtractLeaveThreshold: '600' /* seconds */,
+	rankAssignmentStyle: RankAssignmentStyle.all,
+	rankAnnouncementChannel: null,
+	rankAnnouncementMessage:
+		'Congratulations, **{memberMention}** has reached the **{rankName}** rank!',
+	hideLeftMembersFromLeaderboard: 'false'
 };
 
 export interface SettingAttributes extends BaseAttributes {
@@ -289,7 +277,11 @@ export const settings = sequelize.define<SettingInstance, SettingAttributes>(
 			SettingsKey.modChannel,
 			SettingsKey.logChannel,
 			SettingsKey.getUpdates,
-			SettingsKey.autoSubtractFakes
+			SettingsKey.autoSubtractFakes,
+			SettingsKey.rankAssignmentStyle,
+			SettingsKey.rankAnnouncementChannel,
+			SettingsKey.rankAnnouncementMessage,
+			SettingsKey.hideLeftMembersFromLeaderboard
 		),
 		value: Sequelize.TEXT
 	},
@@ -419,6 +411,72 @@ channels.hasMany(inviteCodes);
 
 inviteCodes.belongsTo(members, { as: 'inviter', foreignKey: 'inviterId' });
 members.hasMany(inviteCodes, { foreignKey: 'inviterId' });
+
+// ------------------------------------
+// Invite Code Settings
+// ------------------------------------
+export enum InviteCodeSettingsKey {
+	name = 'name',
+	roles = 'roles'
+}
+
+export function getInviteCodeSettingsType(key: InviteCodeSettingsKey) {
+	return 'String';
+}
+
+export const defaultInviteCodeSettings: {
+	[k in InviteCodeSettingsKey]: string
+} = {
+	name: null,
+	roles: null
+};
+
+export interface InviteCodeSettingsAttributes extends BaseAttributes {
+	id: number;
+	guildId: string;
+	inviteCode: string;
+	key: InviteCodeSettingsKey;
+	value: string;
+}
+export interface InviteCodeSettingsInstance
+	extends Sequelize.Instance<InviteCodeSettingsAttributes>,
+		InviteCodeSettingsAttributes {
+	getGuild: Sequelize.BelongsToGetAssociationMixin<GuildInstance>;
+	getInviteCode: Sequelize.BelongsToGetAssociationMixin<InviteCodeInstance>;
+}
+
+export const inviteCodeSettings = sequelize.define<
+	InviteCodeSettingsInstance,
+	InviteCodeSettingsAttributes
+>(
+	'inviteCodeSettings',
+	{
+		key: Sequelize.ENUM(
+			InviteCodeSettingsKey.name,
+			InviteCodeSettingsKey.roles
+		),
+		value: Sequelize.TEXT
+	},
+	{
+		timestamps: true,
+		paranoid: true,
+		indexes: [
+			{
+				unique: true,
+				fields: ['guildId', 'inviteCode']
+			}
+		]
+	}
+);
+
+inviteCodeSettings.belongsTo(guilds);
+guilds.hasMany(inviteCodeSettings);
+
+inviteCodeSettings.belongsTo(inviteCodes, {
+	as: 'invite',
+	foreignKey: 'inviteCode'
+});
+inviteCodes.hasOne(inviteCodeSettings, { foreignKey: 'inviteCode' });
 
 // ------------------------------------
 // Joins
@@ -810,3 +868,72 @@ guilds.hasMany(commandUsage);
 
 commandUsage.belongsTo(members);
 members.hasMany(commandUsage);
+
+// ------------------------------------
+// PremiumSubscriptions
+// ------------------------------------
+export interface PremiumSubscriptionAttributes extends BaseAttributes {
+	id: number;
+	amount: number;
+	validUntil: Date | number | string;
+	guildId: string;
+	memberId: string;
+}
+export interface PremiumSubscriptionInstance
+	extends Sequelize.Instance<PremiumSubscriptionAttributes>,
+		PremiumSubscriptionAttributes {
+	getGuild: Sequelize.BelongsToGetAssociationMixin<GuildInstance>;
+	getMember: Sequelize.BelongsToGetAssociationMixin<MemberInstance>;
+}
+
+export const premiumSubscriptions = sequelize.define<
+	PremiumSubscriptionInstance,
+	PremiumSubscriptionAttributes
+>(
+	'premiumSubscriptions',
+	{
+		amount: Sequelize.DECIMAL(10, 2),
+		validUntil: Sequelize.DATE
+	},
+	{
+		timestamps: true,
+		paranoid: true
+	}
+);
+
+premiumSubscriptions.belongsTo(guilds);
+guilds.hasMany(premiumSubscriptions);
+
+premiumSubscriptions.belongsTo(members);
+members.hasMany(premiumSubscriptions);
+
+// ------------------------------------
+// RolePermssions
+// ------------------------------------
+export interface RolePermissionsAttributes extends BaseAttributes {
+	id: number;
+	roleId: string;
+	command: string;
+}
+export interface RolePermissionsInstance
+	extends Sequelize.Instance<RolePermissionsAttributes>,
+		RolePermissionsAttributes {
+	getRole: Sequelize.BelongsToGetAssociationMixin<RoleInstance>;
+}
+
+export const rolePermissions = sequelize.define<
+	RolePermissionsInstance,
+	RolePermissionsAttributes
+>(
+	'rolePermissions',
+	{
+		command: Sequelize.STRING(32)
+	},
+	{
+		timestamps: true,
+		paranoid: true
+	}
+);
+
+rolePermissions.belongsTo(roles);
+roles.hasMany(rolePermissions);
