@@ -1,6 +1,6 @@
 {
   "name": "invite-manager-tracker",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "invite-tracker.js",
   "scripts": {
