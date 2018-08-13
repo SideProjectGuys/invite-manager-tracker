@@ -493,7 +493,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 	// Update old invite codes that were used
 	if (updatedCodes.length > 0) {
 		await sequelize.query(
-			`UPDATE \`${inviteCodes.name}\` ` +
+			`UPDATE \`inviteCodes\` ` +
 				`SET uses = uses + 1 ` +
 				`WHERE \`code\` IN (${updatedCodes.join(',')})`
 		);
