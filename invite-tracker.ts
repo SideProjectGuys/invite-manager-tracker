@@ -23,20 +23,21 @@ const GUILD_START_INTERVAL = 50;
 const INVITE_CREATE = 40;
 
 // First two arguments are "node" and "<filename>"
-if (process.argv.length < 4) {
+if (process.argv.length < 5) {
 	console.error('-------------------------------------');
-	console.error('Syntax: invite-tracker.js <shardId> <shardCount>');
+	console.error('Syntax: invite-tracker.js <token> <shardId> <shardCount>');
 	console.error('-------------------------------------');
 	process.exit(1);
 }
-const shardId = parseInt(process.argv[2], 10);
-const shardCount = parseInt(process.argv[3], 10);
+const token = process.argv[2];
+const shardId = parseInt(process.argv[3], 10);
+const shardCount = parseInt(process.argv[4], 10);
 
 const prefix = config.rabbitmq.prefix ? config.rabbitmq.prefix + '-' : '';
 const qJoinsName = prefix + 'joins-' + shardId + '-' + shardCount;
 const qLeavesName = prefix + 'leaves-' + shardId + '-' + shardCount;
 
-const client = new Client(config.discordToken, {
+const client = new Client(token, {
 	firstShardID: shardId - 1,
 	lastShardID: shardId - 1,
 	maxShards: shardCount,
@@ -91,11 +92,14 @@ function compareInvites(
 			inviteCodesUsed.push(key);
 		}
 	});
-	Object.keys(oldObj).forEach(key => {
-		if (!newObj[key] && oldObj[key].uses === oldObj[key].maxUses - 1) {
-			inviteCodesUsed.push(key);
-		}
-	});
+	// Only check for max uses if we can't find any others
+	if (inviteCodesUsed.length === 0) {
+		Object.keys(oldObj).forEach(key => {
+			if (!newObj[key] && oldObj[key].uses === oldObj[key].maxUses - 1) {
+				inviteCodesUsed.push(key);
+			}
+		});
+	}
 	return inviteCodesUsed;
 }
 
@@ -407,7 +411,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 					},
 					guild: e.guild,
 					inviter: e.user,
-					uses: e.after.users,
+					uses: e.after.uses + 1,
 					maxUses: e.after.max_uses,
 					maxAge: e.after.max_age,
 					temporary: e.after.temporary,
@@ -432,9 +436,17 @@ client.on('guildMemberAdd', async (guild, member) => {
 		possibleMatches = inviteCodesUsed.join(',');
 	}
 
+	const updatedCodes: string[] = [];
 	// These are all used codes, and all new codes combined.
 	const newAndUsedCodes = inviteCodesUsed
-		.map(code => invs.find(i => i.code === code))
+		.map(code => {
+			const inv = invs.find(i => i.code === code);
+			if (inv) {
+				return inv;
+			}
+			updatedCodes.push(code);
+			return null;
+		})
 		.filter(inv => !!inv)
 		.concat(invs.filter(inv => !oldInvs[inv.code]));
 
@@ -477,6 +489,15 @@ client.on('guildMemberAdd', async (guild, member) => {
 		guildId: member.guild.id,
 		inviterId: inv.inviter ? inv.inviter.id : null
 	}));
+
+	// Update old invite codes that were used
+	if (updatedCodes.length > 0) {
+		await sequelize.query(
+			`UPDATE \`${inviteCodes.name}\` ` +
+				`SET uses = uses + 1 ` +
+				`WHERE \`code\` IN (${updatedCodes.join(',')})`
+		);
+	}
 
 	// We need the invite codes in the DB for the join
 	await inviteCodes.bulkCreate(codes, {
@@ -601,21 +622,19 @@ client.on('guildRoleCreate', async (guild: Guild, role: Role) => {
 });
 
 client.on('guildRoleDelete', async (_: Guild, role: Role) => {
-	const ranksPromise = ranks.destroy({
+	await ranks.destroy({
 		where: {
 			roleId: role.id,
 			guildId: role.guild.id
 		}
 	});
 
-	const rolesPromise = roles.destroy({
+	await roles.destroy({
 		where: {
 			id: role.id,
 			guildId: role.guild.id
 		}
 	});
-
-	await Promise.all([ranksPromise, rolesPromise]);
 });
 
 /*

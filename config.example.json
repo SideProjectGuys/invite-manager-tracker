@@ -1,5 +1,5 @@
 {
-	"discordToken": "",
+	"devToken": "",
 	"environment": "dev",
 	"rabbitmq": {
 		"hostname": "localhost",
