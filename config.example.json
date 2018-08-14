@@ -1,5 +1,6 @@
 {
 	"devToken": "",
+	"proBotId": "",
 	"environment": "dev",
 	"rabbitmq": {
 		"hostname": "localhost",
