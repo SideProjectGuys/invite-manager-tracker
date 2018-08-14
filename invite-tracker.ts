@@ -37,12 +37,21 @@ const prefix = config.rabbitmq.prefix ? config.rabbitmq.prefix + '-' : '';
 const qJoinsName = prefix + 'joins-' + shardId + '-' + shardCount;
 const qLeavesName = prefix + 'leaves-' + shardId + '-' + shardCount;
 
+const disabledGuilds: Set<string> = new Set();
+
+let sendChannel: amqplib.Channel;
+const inviteStore: {
+	[guildId: string]: { [code: string]: { uses: number; maxUses: number } };
+} = {};
+const inviteStoreUpdate: { [guildId: string]: number } = {};
+
 const client = new Client(token, {
 	firstShardID: shardId - 1,
 	lastShardID: shardId - 1,
 	maxShards: shardCount,
 	largeThreshold: 100,
 	messageLimit: 1,
+	getAllUsers: false,
 	disableEvents: {
 		MESSAGE_CREATE: false,
 		MESSAGE_DELETE: false,
@@ -63,17 +72,11 @@ process.on('unhandledRejection', (reason: any, p: any) => {
 	console.error('Unhandled Rejection at: Promise', p, 'reason:', reason);
 });
 
-let sendChannel: amqplib.Channel;
-const inviteStore: {
-	[guildId: string]: { [code: string]: { uses: number; maxUses: number } };
-} = {};
-const inviteStoreUpdate: { [guildId: string]: number } = {};
-
 function getInviteCounts(
-	invs: Invite[]
+	invites: Invite[]
 ): { [key: string]: { uses: number; maxUses: number } } {
 	let localInvites: { [key: string]: { uses: number; maxUses: number } } = {};
-	invs.forEach(value => {
+	invites.forEach(value => {
 		localInvites[value.code] = { uses: value.uses, maxUses: value.maxUses };
 	});
 	return localInvites;
@@ -307,12 +310,21 @@ client.on('ready', async () => {
 	let i = 0;
 	allGuilds.forEach(async guild => {
 		const func = async () => {
+			// Filter any guilds that have the pro tracker
+			if (guild.members.has(config.proBotId)) {
+				console.log(
+					`DISABLING TRACKER FOR ${guild.id} BECAUSE PRO VERSION IS ACTIVE`
+				);
+				disabledGuilds.add(guild.id);
+				return;
+			}
+
 			try {
 				// Insert data into db
 				await insertGuildData(guild);
 
 				console.log(
-					'EVENT(clientReady):Updated invite count for ' + guild.name
+					'EVENT(clientReady): Updated invite count for ' + guild.name
 				);
 			} catch (e) {
 				console.log(`ERROR in EVENT(clientReady):${guild.id},${guild.name}`, e);
@@ -346,6 +358,12 @@ client.on('guildCreate', async (guild: Guild) => {
 });
 
 client.on('guildDelete', async (guild: Guild) => {
+	// If we're disabled it means the pro tracker is in that guild,
+	// so don't delete the guild
+	if (disabledGuilds.has(guild.id)) {
+		return;
+	}
+
 	// Remove the guild (only sets the 'deletedAt' timestamp)
 	await guilds.destroy({
 		where: {
@@ -362,7 +380,19 @@ client.on('guildMemberAdd', async (guild, member) => {
 		member.user.discriminator
 	);
 
+	// Ignore disabled guilds
+	if (disabledGuilds.has(guild.id)) {
+		return;
+	}
+
 	if (member.user.bot) {
+		// Check if it's our premium bot
+		if (member.user.id === config.proBotId) {
+			console.log(
+				`DISABLING TRACKER FOR ${guild.id} BECAUSE PRO VERSION IS ACTIVE`
+			);
+			disabledGuilds.add(guild.id);
+		}
 		return;
 	}
 
@@ -493,7 +523,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 	// Update old invite codes that were used
 	if (updatedCodes.length > 0) {
 		await sequelize.query(
-			`UPDATE \`${inviteCodes.name}\` ` +
+			`UPDATE \`inviteCodes\` ` +
 				`SET uses = uses + 1 ` +
 				`WHERE \`code\` IN (${updatedCodes.join(',')})`
 		);
@@ -541,6 +571,19 @@ client.on('guildMemberRemove', async (guild, member) => {
 		member.user.username,
 		member.user.discriminator
 	);
+
+	// If the pro version of our bot left, re-enable this version
+	if (member.user.bot && member.user.id === config.proBotId) {
+		disabledGuilds.delete(guild.id);
+		console.log(`ENABLING BOT IN ${guild.id} BECAUSE PRO VERSION LEFT`);
+		// We don't have to record our own leave event
+		return;
+	}
+
+	// Ignore disabled guilds
+	if (disabledGuilds.has(guild.id)) {
+		return;
+	}
 
 	const join = await joins.find({
 		where: {
@@ -608,6 +651,11 @@ client.on('guildMemberRemove', async (guild, member) => {
 });
 
 client.on('guildRoleCreate', async (guild: Guild, role: Role) => {
+	// Ignore disabled guilds
+	if (disabledGuilds.has(guild.id)) {
+		return;
+	}
+
 	let color = role.color.toString(16);
 	if (color.length < 6) {
 		color = '0'.repeat(6 - color.length) + color;
@@ -621,7 +669,12 @@ client.on('guildRoleCreate', async (guild: Guild, role: Role) => {
 	});
 });
 
-client.on('guildRoleDelete', async (_: Guild, role: Role) => {
+client.on('guildRoleDelete', async (guild: Guild, role: Role) => {
+	// Ignore disabled guilds
+	if (disabledGuilds.has(guild.id)) {
+		return;
+	}
+
 	await ranks.destroy({
 		where: {
 			roleId: role.id,
