@@ -525,7 +525,7 @@ client.on('guildMemberAdd', async (guild, member) => {
 		await sequelize.query(
 			`UPDATE \`inviteCodes\` ` +
 				`SET uses = uses + 1 ` +
-				`WHERE \`code\` IN (${updatedCodes.join(',')})`
+				`WHERE \`code\` IN (${updatedCodes.map(c => `'${c}'`).join(',')})`
 		);
 	}
 
