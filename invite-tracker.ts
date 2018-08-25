@@ -25,15 +25,22 @@ const INVITE_CREATE = 40;
 // First two arguments are "node" and "<filename>"
 if (process.argv.length < 5) {
 	console.error('-------------------------------------');
-	console.error('Syntax: invite-tracker.js <token> <shardId> <shardCount>');
+	console.error(
+		'Syntax: invite-tracker.js <token> <shardId> <shardCount> (<prefix>)'
+	);
 	console.error('-------------------------------------');
 	process.exit(1);
 }
 const token = process.argv[2];
 const shardId = parseInt(process.argv[3], 10);
 const shardCount = parseInt(process.argv[4], 10);
+const _prefix = process.argv[5];
 
-const prefix = config.rabbitmq.prefix ? config.rabbitmq.prefix + '-' : '';
+const prefix = _prefix
+	? _prefix + '-'
+	: config.rabbitmq.prefix
+		? config.rabbitmq.prefix + '-'
+		: '';
 const qJoinsName = prefix + 'joins-' + shardId + '-' + shardCount;
 const qLeavesName = prefix + 'leaves-' + shardId + '-' + shardCount;
 
