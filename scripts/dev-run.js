@@ -10,7 +10,7 @@ let child = spawn('npm', ['run', 'build'], {
 
 child.on('close', (code) => {
 	child = spawn('node', [
-		'./build/invite-tracker.js', config.devToken, '1', '1'
+		'./bin/tracker.js', config.devToken, '1', '1'
 	], {
 		stdio: 'inherit'
 	});
