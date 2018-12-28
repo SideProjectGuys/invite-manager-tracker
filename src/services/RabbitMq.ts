@@ -90,6 +90,7 @@ export class RabbitMq {
 			Buffer.from(
 				JSON.stringify({
 					shard: this.shard,
+					service: 'tracker',
 					...message
 				})
 			)
