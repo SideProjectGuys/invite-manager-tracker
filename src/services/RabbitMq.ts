@@ -61,9 +61,11 @@ export class RabbitMq {
 
 			await channel.bindQueue(this.qCmdsName, `shard-${this.shard}`, '');
 		});
+
+		client.on('ready', this.onReady.bind(this));
 	}
 
-	public async init() {
+	public async onReady() {
 		await this.channelCmds.prefetch(5);
 		this.channelCmds.consume(this.qCmdsName, msg => this.onShardCommand(msg), {
 			noAck: false
