@@ -56,6 +56,8 @@ export class IMClient extends Client {
 			}
 		});
 
+		this.shardId = shardId;
+		this.shardCount = shardCount;
 		this.startedAt = new Date();
 
 		this.config = config;
