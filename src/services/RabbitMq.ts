@@ -120,6 +120,10 @@ export class RabbitMq {
 		switch (cmd) {
 			case ShardCommand.STATUS:
 				sendResponse({
+					guilds: {
+						total: this.client.tracking.totalGuilds,
+						ready: this.client.tracking.readyGuilds
+					},
 					connected: this.client.gatewayConnected
 				});
 				break;

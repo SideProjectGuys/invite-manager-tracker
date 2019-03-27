@@ -58,6 +58,7 @@ export interface GuildAttributes extends BaseAttributes {
 	name: string;
 	icon: string;
 	memberCount: number;
+	banReason: string;
 }
 export interface GuildInstance
 	extends Sequelize.Instance<GuildAttributes>,
@@ -87,7 +88,8 @@ export const guilds = sequelize.define<GuildInstance, GuildAttributes>(
 		id: { type: Sequelize.STRING(32), primaryKey: true },
 		name: Sequelize.STRING,
 		icon: Sequelize.STRING,
-		memberCount: Sequelize.INTEGER
+		memberCount: Sequelize.INTEGER,
+		banReason: { type: Sequelize.STRING, allowNull: true }
 	},
 	{
 		timestamps: true,
@@ -245,114 +247,26 @@ export enum SettingsKey {
 	autoModHoistEnabled = 'autoModHoistEnabled'
 }
 
-export type SettingsObject = {
-	prefix: string;
-	lang: Lang;
-	logChannel: string;
-	getUpdates: boolean;
-
-	joinMessage: string;
-	joinMessageChannel: string;
-	leaveMessage: string;
-	leaveMessageChannel: string;
-
-	leaderboardStyle: LeaderboardStyle;
-	hideLeftMembersFromLeaderboard: boolean;
-
-	autoSubtractFakes: boolean;
-	autoSubtractLeaves: boolean;
-	autoSubtractLeaveThreshold: number /* seconds */;
-
-	rankAssignmentStyle: RankAssignmentStyle;
-	rankAnnouncementChannel: string;
-	rankAnnouncementMessage: string;
-
-	mutedRole: string;
-
-	captchaVerificationOnJoin: boolean;
-	captchaVerificationWelcomeMessage: string;
-	captchaVerificationSuccessMessage: string;
-	captchaVerificationFailedMessage: string;
-	captchaVerificationTimeout: number /* seconds */;
-	captchaVerificationLogEnabled: boolean;
-
-	modLogChannel: string;
-	modPunishmentBanDeleteMessage: boolean;
-	modPunishmentKickDeleteMessage: boolean;
-	modPunishmentSoftbanDeleteMessage: boolean;
-	modPunishmentWarnDeleteMessage: boolean;
-	modPunishmentMuteDeleteMessage: boolean;
-
-	autoModEnabled: boolean;
-	autoModModeratedChannels: string[];
-	autoModModeratedRoles: string[];
-	autoModIgnoredChannels: string[];
-	autoModIgnoredRoles: string[];
-	autoModDeleteBotMessage: boolean;
-	autoModDeleteBotMessageTimeoutInSeconds: number;
-	autoModLogEnabled: boolean;
-
-	autoModDisabledForOldMembers: boolean;
-	autoModDisabledForOldMembersThreshold: number /* seconds, default 1 week */;
-
-	autoModInvitesEnabled: boolean;
-
-	autoModLinksEnabled: boolean;
-	autoModLinksWhitelist: string[];
-	autoModLinksBlacklist: string[];
-	autoModLinksFollowRedirects: boolean;
-
-	autoModWordsEnabled: boolean;
-	autoModWordsBlacklist: string[];
-
-	autoModAllCapsEnabled: boolean;
-	autoModAllCapsMinCharacters: number;
-	autoModAllCapsPercentageCaps: number;
-
-	autoModDuplicateTextEnabled: boolean;
-	autoModDuplicateTextTimeframeInSeconds: number;
-
-	autoModQuickMessagesEnabled: boolean;
-	autoModQuickMessagesNumberOfMessages: number;
-	autoModQuickMessagesTimeframeInSeconds: number;
-
-	autoModMentionUsersEnabled: boolean;
-	autoModMentionUsersMaxNumberOfMentions: number;
-
-	autoModMentionRolesEnabled: boolean;
-	autoModMentionRolesMaxNumberOfMentions: number;
-
-	autoModEmojisEnabled: boolean;
-	autoModEmojisMaxNumberOfEmojis: number;
-
-	autoModHoistEnabled: boolean;
-};
-
-export type InternalSettingsTypes =
-	| 'String'
-	| 'Number'
-	| 'Boolean'
-	| 'Channel'
-	| 'Role'
-	| 'String[]'
-	| 'Channel[]'
-	| 'Role[]'
-	| 'Enum<LeaderboardStyle>'
-	| 'Enum<RankAssignmentStyle>'
-	| 'Enum<Lang>';
-
-export type SettingsTypesObject = { [k in SettingsKey]: InternalSettingsTypes };
-
 export enum Lang {
+	cs = 'cs',
 	de = 'de',
+	el = 'el',
 	en = 'en',
 	es = 'es',
 	fr = 'fr',
+	ga = 'ga',
+	he_IL = 'he_IL',
+	hu = 'hu',
 	it = 'it',
+	lt = 'lt',
 	nl = 'nl',
+	pt_BR = 'pt_BR',
 	pt = 'pt',
 	ro = 'ro',
-	sv = 'sv'
+	ru = 'ru',
+	sr = 'sr',
+	sv = 'sv',
+	ur_PK = 'ur_PK'
 }
 
 export enum LeaderboardStyle {
@@ -365,178 +279,6 @@ export enum RankAssignmentStyle {
 	all = 'all',
 	highest = 'highest'
 }
-
-export const settingsTypes: SettingsTypesObject = {
-	prefix: 'String',
-	lang: 'Enum<Lang>',
-	logChannel: 'Channel',
-	getUpdates: 'Boolean',
-
-	joinMessage: 'String',
-	joinMessageChannel: 'Channel',
-	leaveMessage: 'String',
-	leaveMessageChannel: 'Channel',
-
-	leaderboardStyle: 'Enum<LeaderboardStyle>',
-	hideLeftMembersFromLeaderboard: 'Boolean',
-
-	autoSubtractFakes: 'Boolean',
-	autoSubtractLeaves: 'Boolean',
-	autoSubtractLeaveThreshold: 'Number' /* seconds */,
-
-	rankAssignmentStyle: 'Enum<RankAssignmentStyle>',
-	rankAnnouncementChannel: 'Channel',
-	rankAnnouncementMessage: 'String',
-
-	mutedRole: 'Role',
-
-	captchaVerificationOnJoin: 'Boolean',
-	captchaVerificationWelcomeMessage: 'String',
-	captchaVerificationSuccessMessage: 'String',
-	captchaVerificationFailedMessage: 'String',
-	captchaVerificationTimeout: 'Number' /* seconds */,
-	captchaVerificationLogEnabled: 'Boolean',
-
-	modLogChannel: 'Channel',
-	modPunishmentBanDeleteMessage: 'Boolean',
-	modPunishmentKickDeleteMessage: 'Boolean',
-	modPunishmentSoftbanDeleteMessage: 'Boolean',
-	modPunishmentWarnDeleteMessage: 'Boolean',
-	modPunishmentMuteDeleteMessage: 'Boolean',
-
-	autoModEnabled: 'Boolean',
-	autoModModeratedChannels: 'Channel[]',
-	autoModModeratedRoles: 'Role[]',
-	autoModIgnoredChannels: 'Channel[]',
-	autoModIgnoredRoles: 'Role[]',
-	autoModDeleteBotMessage: 'Boolean',
-	autoModDeleteBotMessageTimeoutInSeconds: 'Number',
-	autoModLogEnabled: 'Boolean',
-
-	autoModDisabledForOldMembers: 'Boolean',
-	autoModDisabledForOldMembersThreshold: 'Number' /* seconds, default 1 week */,
-
-	autoModInvitesEnabled: 'Boolean',
-
-	autoModLinksEnabled: 'Boolean',
-	autoModLinksWhitelist: 'String[]',
-	autoModLinksBlacklist: 'String[]',
-	autoModLinksFollowRedirects: 'Boolean',
-
-	autoModWordsEnabled: 'Boolean',
-	autoModWordsBlacklist: 'String[]',
-
-	autoModAllCapsEnabled: 'Boolean',
-	autoModAllCapsMinCharacters: 'Number',
-	autoModAllCapsPercentageCaps: 'Number',
-
-	autoModDuplicateTextEnabled: 'Boolean',
-	autoModDuplicateTextTimeframeInSeconds: 'Number',
-
-	autoModQuickMessagesEnabled: 'Boolean',
-	autoModQuickMessagesNumberOfMessages: 'Number',
-	autoModQuickMessagesTimeframeInSeconds: 'Number',
-
-	autoModMentionUsersEnabled: 'Boolean',
-	autoModMentionUsersMaxNumberOfMentions: 'Number',
-
-	autoModMentionRolesEnabled: 'Boolean',
-	autoModMentionRolesMaxNumberOfMentions: 'Number',
-
-	autoModEmojisEnabled: 'Boolean',
-	autoModEmojisMaxNumberOfEmojis: 'Number',
-
-	autoModHoistEnabled: 'Boolean'
-};
-
-export const defaultSettings: SettingsObject = {
-	prefix: '!',
-	lang: Lang.en,
-	logChannel: null,
-	getUpdates: true,
-
-	joinMessage:
-		'{memberMention} **joined**; Invited by **{inviterName}** (**{numInvites}** invites)',
-	joinMessageChannel: null,
-	leaveMessage: '{memberName} **left**; Invited by **{inviterName}**',
-	leaveMessageChannel: null,
-
-	leaderboardStyle: LeaderboardStyle.normal,
-	hideLeftMembersFromLeaderboard: true,
-
-	autoSubtractFakes: true,
-	autoSubtractLeaves: true,
-	autoSubtractLeaveThreshold: 600 /* seconds */,
-
-	rankAssignmentStyle: RankAssignmentStyle.all,
-	rankAnnouncementChannel: null,
-	rankAnnouncementMessage:
-		'Congratulations, **{memberMention}** has reached the **{rankName}** rank!',
-
-	mutedRole: null,
-
-	captchaVerificationOnJoin: false,
-	captchaVerificationWelcomeMessage:
-		'Welcome to the server **{serverName}**! For extra protection, new members are required to enter a captcha.',
-	captchaVerificationSuccessMessage:
-		'You have successfully entered the captcha. Welcome to the server!',
-	captchaVerificationFailedMessage:
-		'You did not enter the captha right within the specified time.' +
-		`We're sorry, but we have to kick you from the server. Feel free to join again.`,
-	captchaVerificationTimeout: 180 /* seconds */,
-	captchaVerificationLogEnabled: true,
-
-	modLogChannel: null,
-	modPunishmentBanDeleteMessage: true,
-	modPunishmentKickDeleteMessage: true,
-	modPunishmentSoftbanDeleteMessage: true,
-	modPunishmentWarnDeleteMessage: true,
-	modPunishmentMuteDeleteMessage: true,
-
-	autoModEnabled: false,
-	autoModModeratedChannels: [],
-	autoModModeratedRoles: [],
-	autoModIgnoredChannels: [],
-	autoModIgnoredRoles: [],
-	autoModDeleteBotMessage: true,
-	autoModDeleteBotMessageTimeoutInSeconds: 5,
-	autoModLogEnabled: true,
-
-	autoModDisabledForOldMembers: false,
-	autoModDisabledForOldMembersThreshold: 604800 /* seconds, default 1 week */,
-
-	autoModInvitesEnabled: true,
-
-	autoModLinksEnabled: true,
-	autoModLinksWhitelist: [],
-	autoModLinksBlacklist: [],
-	autoModLinksFollowRedirects: true,
-
-	autoModWordsEnabled: true,
-	autoModWordsBlacklist: [],
-
-	autoModAllCapsEnabled: true,
-	autoModAllCapsMinCharacters: 10,
-	autoModAllCapsPercentageCaps: 70,
-
-	autoModDuplicateTextEnabled: true,
-	autoModDuplicateTextTimeframeInSeconds: 60,
-
-	autoModQuickMessagesEnabled: true,
-	autoModQuickMessagesNumberOfMessages: 5,
-	autoModQuickMessagesTimeframeInSeconds: 3,
-
-	autoModMentionUsersEnabled: true,
-	autoModMentionUsersMaxNumberOfMentions: 5,
-
-	autoModMentionRolesEnabled: true,
-	autoModMentionRolesMaxNumberOfMentions: 3,
-
-	autoModEmojisEnabled: true,
-	autoModEmojisMaxNumberOfEmojis: 5,
-
-	autoModHoistEnabled: true
-};
 
 export interface SettingAttributes extends BaseAttributes {
 	id: number;
@@ -578,22 +320,6 @@ guilds.hasMany(settings);
 export enum MemberSettingsKey {
 	hideFromLeaderboard = 'hideFromLeaderboard'
 }
-
-export type MemberSettingsObject = {
-	hideFromLeaderboard: boolean;
-};
-
-export type MemberSettingsTypesObject = {
-	[k in MemberSettingsKey]: InternalSettingsTypes
-};
-
-export const memberSettingsTypes: MemberSettingsTypesObject = {
-	hideFromLeaderboard: 'Boolean'
-};
-
-export const defaultMemberSettings: MemberSettingsObject = {
-	hideFromLeaderboard: false
-};
 
 export interface MemberSettingsAttributes extends BaseAttributes {
 	id: number;
@@ -652,6 +378,7 @@ export interface InviteCodeAttributes extends BaseAttributes {
 	deletedAt?: Date;
 	guildId: string;
 	inviterId: string;
+	clearedAmount: number;
 }
 export interface InviteCodeInstance
 	extends Sequelize.Instance<InviteCodeAttributes>,
@@ -680,7 +407,8 @@ export const inviteCodes = sequelize.define<
 		temporary: Sequelize.BOOLEAN,
 		channelId: Sequelize.STRING(32),
 		guildId: Sequelize.STRING(32),
-		inviterId: Sequelize.STRING(32)
+		inviterId: Sequelize.STRING(32),
+		clearedAmount: { type: Sequelize.INTEGER, defaultValue: 0 }
 	},
 	{
 		timestamps: true,
@@ -704,25 +432,6 @@ export enum InviteCodeSettingsKey {
 	name = 'name',
 	roles = 'roles'
 }
-
-export type InviteCodeSettingsObject = {
-	name: string;
-	roles: string[];
-};
-
-export type InviteCodeSettingsTypesObject = {
-	[k in InviteCodeSettingsKey]: InternalSettingsTypes
-};
-
-export const inviteCodeSettingsTypes: InviteCodeSettingsTypesObject = {
-	name: 'String',
-	roles: 'Role[]'
-};
-
-export const defaultInviteCodeSettings: InviteCodeSettingsObject = {
-	name: null,
-	roles: []
-};
 
 export interface InviteCodeSettingsAttributes extends BaseAttributes {
 	id: number;
@@ -774,12 +483,18 @@ inviteCodes.hasMany(inviteCodeSettings, { foreignKey: 'inviteCode' });
 // ------------------------------------
 // Joins
 // ------------------------------------
+export enum JoinInvalidatedReason {
+	fake = 'fake',
+	leave = 'leave'
+}
 export interface JoinAttributes extends BaseAttributes {
 	id: number;
 	exactMatchCode: string;
 	possibleMatches: string;
 	guildId: string;
 	memberId: string;
+	invalidatedReason: JoinInvalidatedReason;
+	cleared: boolean;
 }
 export interface JoinInstance
 	extends Sequelize.Instance<JoinAttributes>,
@@ -797,7 +512,9 @@ export const joins = sequelize.define<JoinInstance, JoinAttributes>(
 			Sequelize.STRING() + ' CHARSET utf8mb4 COLLATE utf8mb4_bin',
 		exactMatchCode: Sequelize.STRING() + ' CHARSET utf8mb4 COLLATE utf8mb4_bin',
 		guildId: Sequelize.STRING(32),
-		memberId: Sequelize.STRING(32)
+		memberId: Sequelize.STRING(32),
+		invalidatedReason: Sequelize.ENUM(Object.values(JoinInvalidatedReason)),
+		cleared: { type: Sequelize.BOOLEAN, defaultValue: 0 }
 	},
 	{
 		timestamps: true,
@@ -872,22 +589,14 @@ joins.hasOne(leaves);
 // ------------------------------------
 // Custom Invites
 // ------------------------------------
-export enum CustomInvitesGeneratedReason {
-	clear_regular = 'clear_regular',
-	clear_custom = 'clear_custom',
-	clear_fake = 'clear_fake',
-	clear_leave = 'clear_leave',
-	fake = 'fake',
-	leave = 'leave'
-}
 export interface CustomInviteAttributes extends BaseAttributes {
 	id: number;
 	amount: number;
 	reason: string;
-	generatedReason: CustomInvitesGeneratedReason;
 	guildId: string;
 	memberId: string;
 	creatorId: string;
+	cleared: boolean;
 }
 export interface CustomInviteInstance
 	extends Sequelize.Instance<CustomInviteAttributes>,
@@ -906,12 +615,10 @@ export const customInvites = sequelize.define<
 		id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
 		amount: Sequelize.INTEGER,
 		reason: Sequelize.STRING,
-		generatedReason: Sequelize.ENUM(
-			Object.values(CustomInvitesGeneratedReason)
-		),
 		guildId: Sequelize.STRING(32),
 		memberId: Sequelize.STRING(32),
-		creatorId: Sequelize.STRING(32)
+		creatorId: Sequelize.STRING(32),
+		cleared: Sequelize.BOOLEAN
 	},
 	{
 		timestamps: true,

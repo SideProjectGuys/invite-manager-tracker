@@ -3,7 +3,6 @@ import { Guild, Invite, Member, Role } from 'eris';
 import { IMClient } from '../client';
 import {
 	channels,
-	defaultSettings,
 	guilds,
 	inviteCodes,
 	joins,
@@ -16,7 +15,7 @@ import {
 	settings,
 	SettingsKey
 } from '../sequelize';
-import { toDbValue } from '../settings';
+import { toDbValue, defaultSettings } from '../settings';
 import { ChannelType } from '../types';
 import { deconstruct } from '../util';
 
@@ -25,6 +24,9 @@ const INVITE_CREATE = 40;
 
 export class Tracking {
 	private client: IMClient;
+
+	public readyGuilds: number = 0;
+	public totalGuilds: number = 0;
 
 	private inviteStore: {
 		[guildId: string]: { [code: string]: { uses: number; maxUses: number } };
@@ -53,7 +55,8 @@ export class Tracking {
 				name: g.name,
 				icon: g.iconURL,
 				memberCount: g.memberCount,
-				deletedAt: null
+				deletedAt: null,
+				banReason: null
 			})),
 			{
 				updateOnDuplicate: [
@@ -90,6 +93,7 @@ export class Tracking {
 		);
 
 		let i = 0;
+		this.totalGuilds = allGuilds.size;
 		allGuilds.forEach(async guild => {
 			const func = async () => {
 				// Filter any guilds that have the pro tracker
@@ -114,6 +118,8 @@ export class Tracking {
 						e
 					);
 				}
+
+				this.readyGuilds++;
 			};
 			setTimeout(func, i * GUILD_START_INTERVAL);
 			i++;
@@ -126,7 +132,8 @@ export class Tracking {
 			name: guild.name,
 			icon: guild.iconURL,
 			memberCount: guild.memberCount,
-			deletedAt: null
+			deletedAt: null,
+			banReason: null
 		});
 
 		try {
@@ -341,7 +348,8 @@ export class Tracking {
 			uses: inv.uses,
 			temporary: inv.temporary,
 			guildId: member.guild.id,
-			inviterId: inv.inviter ? inv.inviter.id : null
+			inviterId: inv.inviter ? inv.inviter.id : null,
+			clearedAmount: 0
 		}));
 
 		// Update old invite codes that were used
@@ -364,7 +372,9 @@ export class Tracking {
 			possibleMatches,
 			memberId: member.id,
 			guildId: guild.id,
-			createdAt: member.joinedAt
+			createdAt: member.joinedAt,
+			invalidatedReason: null,
+			cleared: false
 		});
 
 		// Send to RabbitMQ
@@ -564,7 +574,8 @@ export class Tracking {
 			uses: inv.uses,
 			temporary: inv.temporary,
 			guildId: guild.id,
-			inviterId: inv.inviter ? inv.inviter.id : null
+			inviterId: inv.inviter ? inv.inviter.id : null,
+			clearedAmount: 0
 		}));
 
 		// Then insert invite codes
