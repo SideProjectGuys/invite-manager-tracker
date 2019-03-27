@@ -70,7 +70,7 @@ export class IMClient extends Client {
 
 		this.on('ready', this.onReady);
 		this.on('connect', this.onConnect);
-		this.on('disconnect', this.onDisconnect);
+		this.on('shardDisconnect', this.onDisconnect);
 		this.on('warn', this.onWarn);
 		this.on('error', this.onError);
 	}
@@ -92,14 +92,19 @@ export class IMClient extends Client {
 		this.gatewayConnected = true;
 	}
 
-	private async onDisconnect() {
+	private async onDisconnect(err: Error) {
 		console.error('DISCORD DISCONNECT');
 		this.rabbitmq.sendToManager({
 			id: 'status',
 			cmd: ShardCommand.STATUS,
-			connected: false
+			connected: false,
+			error: err ? err.message : null
 		});
 		this.gatewayConnected = false;
+
+		if (err) {
+			console.error(err);
+		}
 	}
 
 	private async onWarn(warn: string) {
